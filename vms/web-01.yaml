@@ -62,3 +62,5 @@ spec:
                   sudo: ALL=(ALL) NOPASSWD:ALL
                   ssh_authorized_keys:
                     - ssh-ed25519 TODO_REPLACE_WITH_YOUR_PUBLIC_KEY
+                  password: $6$rounds=4096$YOUR_SECURE_HASHED_PASSWORD
+                  chpasswd: { expire: False }

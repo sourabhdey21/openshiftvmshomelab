@@ -7,8 +7,8 @@ spec:
   project: gitops-vms
   source:
     # Change this to your Git repo URL after you push.
-    repoURL: https://github.com/YOUR_ORG/openshift.git
-    targetRevision: main
+    repoURL: https://github.com/sourabhdey21/openshiftvmshomelab.git
+    targetRevision: master
     path: .
   destination:
     server: https://kubernetes.default.svc
