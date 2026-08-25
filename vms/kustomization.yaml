@@ -4,8 +4,8 @@ kind: Kustomization
 # Add a new VM: copy examples/vm-template.yaml into this folder,
 # edit it, then list the file here.
 resources:
-  - web-01.yaml
-  - db-01.yaml
-  - nginx-01.yaml
-  - mysql.yaml
-  - postgresql.yaml
+  # - web-01.yaml
+  # - db-01.yaml
+  # - nginx-01.yaml
+  # - mysql.yaml
+  # - postgresql.yaml
