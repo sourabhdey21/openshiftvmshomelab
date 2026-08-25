@@ -9,3 +9,4 @@ resources:
   - nginx-01.yaml
   - mysql.yaml
   - postgresql.yaml
+  - fedora-db.yaml

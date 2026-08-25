@@ -1,0 +1,151 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: fedora-db
+  labels:
+    app.kubernetes.io/name: fedora-db
+    app.kubernetes.io/part-of: gitops-vms
+    app.kubernetes.io/managed-by: gitops
+    vm-role: db
+spec:
+  runStrategy: Always
+  dataVolumeTemplates:
+    - metadata:
+        name: fedora-db-rootdisk
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: fedora
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 100Gi
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: fedora-db
+        app.kubernetes.io/name: fedora-db
+        vm-role: db
+    spec:
+      evictionStrategy: LiveMigrate
+      domain:
+        cpu:
+          cores: 4
+        memory:
+          guest: 8Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinit
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: fedora-db-rootdisk
+        - name: cloudinit
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: fedora-db
+              users:
+                - name: cloud-user
+                  lock_passwd: false
+                  sudo: ALL=(ALL) NOPASSWD:ALL
+                  ssh_authorized_keys:
+                    - ssh-ed25519 TODO_REPLACE_WITH_YOUR_PUBLIC_KEY
+                  passwd: $6$K9TOsEC9xpM0q.AC$C1snA3ATH141HkrkOINfjFDfv/5vITAn8gkx57TAZWhUQt2xkSkxTGOtZhi8cs4UXJ0UKyslWZ8FZWNWyqfWH0
+              chpasswd:
+                expire: false
+              write_files:
+                - path: /etc/my.cnf.d/99-listen.cnf
+                  permissions: "0644"
+                  content: |
+                    [mysqld]
+                    bind-address = 0.0.0.0
+                    mysqlx-bind-address = 0.0.0.0
+                - path: /usr/local/sbin/install-dbs.sh
+                  permissions: "0755"
+                  content: |
+                    #!/bin/bash
+                    set -eux
+                    dnf install -y postgresql-server postgresql-contrib
+                    postgresql-setup --initdb
+                    sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /var/lib/pgsql/data/postgresql.conf
+                    echo "host all all 0.0.0.0/0 scram-sha-256" >> /var/lib/pgsql/data/pg_hba.conf
+                    systemctl enable --now postgresql
+                    su - postgres -c "psql -c \"CREATE USER app WITH PASSWORD 'C1sc0123!' SUPERUSER;\""
+                    su - postgres -c "psql -c \"CREATE DATABASE app OWNER app;\""
+
+                    dnf install -y community-mysql-server || dnf install -y mariadb-server
+                    systemctl enable --now mysqld || systemctl enable --now mariadb
+                    mysql -e "CREATE USER IF NOT EXISTS 'app'@'%' IDENTIFIED BY 'C1sc0123!'; GRANT ALL PRIVILEGES ON *.* TO 'app'@'%' WITH GRANT OPTION; FLUSH PRIVILEGES;"
+
+                    cat >/etc/yum.repos.d/mongodb-org-7.0.repo <<'EOF'
+                    [mongodb-org-7.0]
+                    name=MongoDB Repository
+                    baseurl=https://repo.mongodb.org/yum/redhat/9/mongodb-org/7.0/x86_64/
+                    gpgcheck=1
+                    enabled=1
+                    gpgkey=https://pgp.mongodb.com/server-7.0.asc
+                    EOF
+                    if dnf install -y mongodb-org; then
+                      sed -i 's/bindIp: 127.0.0.1/bindIp: 0.0.0.0/' /etc/mongod.conf
+                      systemctl enable --now mongod
+                      sleep 5
+                      mongosh --eval 'db.getSiblingDB("admin").createUser({user:"app",pwd:"C1sc0123!",roles:[{role:"root",db:"admin"}]})' || true
+                    else
+                      dnf install -y podman
+                      podman run -d --name mongodb --restart=always \
+                        -p 27017:27017 \
+                        -e MONGO_INITDB_ROOT_USERNAME=app \
+                        -e MONGO_INITDB_ROOT_PASSWORD='C1sc0123!' \
+                        docker.io/library/mongo:7
+                    fi
+
+                    firewall-cmd --permanent --add-port=5432/tcp || true
+                    firewall-cmd --permanent --add-port=3306/tcp || true
+                    firewall-cmd --permanent --add-port=33060/tcp || true
+                    firewall-cmd --permanent --add-port=27017/tcp || true
+                    firewall-cmd --reload || true
+              runcmd:
+                - /usr/local/sbin/install-dbs.sh
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fedora-db-lb
+spec:
+  selector:
+    kubevirt.io/domain: fedora-db
+  type: LoadBalancer
+  ports:
+    - name: ssh
+      protocol: TCP
+      port: 22
+      targetPort: 22
+    - name: postgresql
+      protocol: TCP
+      port: 5432
+      targetPort: 5432
+    - name: mysql
+      protocol: TCP
+      port: 3306
+      targetPort: 3306
+    - name: mysqlx
+      protocol: TCP
+      port: 33060
+      targetPort: 33060
+    - name: mongodb
+      protocol: TCP
+      port: 27017
+      targetPort: 27017
