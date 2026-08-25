@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: gitops-vms
+  namespace: openshift-gitops
+spec:
+  description: GitOps-managed OpenShift Virtualization VMs
+  sourceRepos:
+    - "*"
+  destinations:
+    - namespace: gitops-vms
+      server: https://kubernetes.default.svc
+    - namespace: openshift-gitops
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

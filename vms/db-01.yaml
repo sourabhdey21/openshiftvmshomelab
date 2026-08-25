@@ -1,0 +1,64 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: db-01
+  labels:
+    app.kubernetes.io/name: db-01
+    app.kubernetes.io/part-of: gitops-vms
+    app.kubernetes.io/managed-by: gitops
+    vm-role: db
+spec:
+  runStrategy: Always
+  dataVolumeTemplates:
+    - metadata:
+        name: db-01-rootdisk
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: fedora
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 80Gi
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: db-01
+        app.kubernetes.io/name: db-01
+        vm-role: db
+    spec:
+      evictionStrategy: LiveMigrate
+      domain:
+        cpu:
+          cores: 4
+        memory:
+          guest: 8Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinit
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: db-01-rootdisk
+        - name: cloudinit
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: db-01
+              users:
+                - name: cloud-user
+                  sudo: ALL=(ALL) NOPASSWD:ALL
+                  ssh_authorized_keys:
+                    - ssh-ed25519 TODO_REPLACE_WITH_YOUR_PUBLIC_KEY

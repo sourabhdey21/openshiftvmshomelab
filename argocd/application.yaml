@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitops-vms
+  namespace: openshift-gitops
+spec:
+  project: gitops-vms
+  source:
+    # Change this to your Git repo URL after you push.
+    repoURL: https://github.com/YOUR_ORG/openshift.git
+    targetRevision: main
+    path: .
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gitops-vms
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true

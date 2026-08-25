@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gitops-vms
+  labels:
+    app.kubernetes.io/name: gitops-vms
+    app.kubernetes.io/managed-by: gitops
+    kubernetes.io/metadata.name: gitops-vms
