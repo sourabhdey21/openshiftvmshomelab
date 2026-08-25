@@ -1,0 +1,164 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: lampstack-cloudinit
+  labels:
+    app.kubernetes.io/name: lampstack
+    app.kubernetes.io/part-of: gitops-vms
+type: Opaque
+stringData:
+  userdata: |
+    #cloud-config
+    hostname: lampstack
+    ssh_pwauth: true
+    disable_root: true
+    users:
+      - name: cloud-user
+        lock_passwd: false
+        sudo: ALL=(ALL) NOPASSWD:ALL
+        shell: /bin/bash
+        ssh_authorized_keys:
+          - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGd8HntJdG1cjmMyN8JY2Ss221MJDgkz+q5km7KFo9ql sourabh@pop-os
+        passwd: $6$GBuanYMcjhMj8lLq$E5yMUgbeES6FXKbwPpVjgXqIgIG3.vlG9ESfSYySGdncyEfAflTKv5rU1K6JPmw.hFsNmCs9.R7q6AsxUB9I1/
+    chpasswd:
+      expire: false
+    write_files:
+      - path: /etc/my.cnf.d/99-listen.cnf
+        permissions: "0644"
+        content: |
+          [mysqld]
+          bind-address = 0.0.0.0
+          mysqlx-bind-address = 0.0.0.0
+      - path: /usr/local/sbin/enable-ssh-password.sh
+        permissions: "0755"
+        content: |
+          #!/bin/bash
+          set -eux
+          mkdir -p /etc/ssh/sshd_config.d
+          cat >/etc/ssh/sshd_config.d/50-cloud-init.conf <<'EOF'
+          PasswordAuthentication yes
+          KbdInteractiveAuthentication yes
+          ChallengeResponseAuthentication yes
+          UsePAM yes
+          EOF
+          sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config || true
+          sed -i 's/^#\?ChallengeResponseAuthentication.*/ChallengeResponseAuthentication yes/' /etc/ssh/sshd_config || true
+          sed -i 's/^#\?KbdInteractiveAuthentication.*/KbdInteractiveAuthentication yes/' /etc/ssh/sshd_config || true
+          if [ -d /etc/ssh/sshd_config.d ]; then
+            grep -Rl 'PasswordAuthentication no' /etc/ssh/sshd_config.d | while read -r f; do
+              sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' "$f" || true
+            done
+          fi
+          systemctl restart sshd || systemctl restart ssh
+      - path: /usr/local/sbin/install-lamp.sh
+        permissions: "0755"
+        content: |
+          #!/bin/bash
+          set -eux
+          dnf install -y httpd php php-cli php-common php-mysqlnd php-fpm
+          dnf install -y community-mysql-server || dnf install -y mariadb-server
+          cat >/var/www/html/index.php <<'EOF'
+          <?php
+          phpinfo();
+          EOF
+          chown apache:apache /var/www/html/index.php || true
+          restorecon -Rv /var/www/html || true
+          systemctl enable --now httpd
+          systemctl enable --now php-fpm || true
+          systemctl enable --now mysqld || systemctl enable --now mariadb
+          firewall-cmd --permanent --add-service=ssh || firewall-cmd --permanent --add-port=22/tcp || true
+          firewall-cmd --permanent --add-service=http || firewall-cmd --permanent --add-port=80/tcp || true
+          firewall-cmd --permanent --add-service=https || firewall-cmd --permanent --add-port=443/tcp || true
+          firewall-cmd --permanent --add-port=3306/tcp || true
+          firewall-cmd --reload || true
+          mysql -e "CREATE USER IF NOT EXISTS 'app'@'%' IDENTIFIED BY 'C1sc0123!'; GRANT ALL PRIVILEGES ON *.* TO 'app'@'%' WITH GRANT OPTION; FLUSH PRIVILEGES;"
+          mysql -e "CREATE DATABASE IF NOT EXISTS app;"
+    runcmd:
+      - /usr/local/sbin/enable-ssh-password.sh
+      - /usr/local/sbin/install-lamp.sh
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: lampstack
+  labels:
+    app.kubernetes.io/name: lampstack
+    app.kubernetes.io/part-of: gitops-vms
+    app.kubernetes.io/managed-by: gitops
+    vm-role: web
+spec:
+  runStrategy: Always
+  dataVolumeTemplates:
+    - metadata:
+        name: lampstack-rootdisk
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: fedora
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              # Fedora golden image is ~32Gi; LAMP also needs room for MariaDB
+              storage: 40Gi
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: lampstack
+        app.kubernetes.io/name: lampstack
+        vm-role: web
+    spec:
+      evictionStrategy: LiveMigrate
+      domain:
+        cpu:
+          cores: 2
+        memory:
+          guest: 4Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinit
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: lampstack-rootdisk
+        - name: cloudinit
+          cloudInitNoCloud:
+            secretRef:
+              name: lampstack-cloudinit
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lampstack-lb
+spec:
+  selector:
+    kubevirt.io/domain: lampstack
+  type: LoadBalancer
+  ports:
+    - name: ssh
+      protocol: TCP
+      port: 22
+      targetPort: 22
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+    - name: https
+      protocol: TCP
+      port: 443
+      targetPort: 443
+    - name: mysql
+      protocol: TCP
+      port: 3306
+      targetPort: 3306

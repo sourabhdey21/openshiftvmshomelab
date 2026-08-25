@@ -10,3 +10,4 @@ resources:
   - mysql.yaml
   - postgresql.yaml
   - fedora-db.yaml
+  - lampstack.yaml
