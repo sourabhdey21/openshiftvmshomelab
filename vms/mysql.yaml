@@ -63,7 +63,7 @@ spec:
                   sudo: ALL=(ALL) NOPASSWD:ALL
                   ssh_authorized_keys:
                     - ssh-ed25519 TODO_REPLACE_WITH_YOUR_PUBLIC_KEY
-                  password: $6$rounds=4096$NRQfL3DJxNqkq6Yz$Ch4XG9Vnt8UjZIyW9ba6RCBT2bFz5KiMiGuTQt4BFGSVMXoUAm/vYxG5oiD8VNyMypW8TSjjv0W1FjBEnMH3v.
+                  password: $6$cdcHPjsAr8vJwiZD$IdHC4GfueAygKMSpEEYkXqZO6.eLePdsLAu4KSs0XKt08Fo6TFLf2LZpS3Nj4vXItYQzVYsXhzOc/FVfhPBu70
                   chpasswd: { expire: False }
               write_files:
                 - path: /etc/my.cnf.d/99-listen.cnf
