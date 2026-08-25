@@ -4,7 +4,9 @@ metadata:
   name: gitops-vms
   namespace: openshift-gitops
 spec:
-  project: gitops-vms
+  # Must be 'default': that project lives in the argocd namespace and
+  # the Git repo is registered for it. Custom projects belong in namespace argocd.
+  project: default
   source:
     # Change this to your Git repo URL after you push.
     repoURL: https://github.com/sourabhdey21/openshiftvmshomelab.git

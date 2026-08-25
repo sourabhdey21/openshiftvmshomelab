@@ -1,20 +1,31 @@
+# Optional. Only apply this if you want a dedicated project instead of default.
+# AppProjects MUST be created in namespace argocd (the Argo CD control plane).
+# Applications stay in namespace openshift-gitops.
+#
+# If you switch the Application to project: gitops-vms, also edit the Git repo
+# in the Argo CD UI and set its Project from "default" to "gitops-vms" (or empty).
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
   name: gitops-vms
-  namespace: openshift-gitops
+  namespace: argocd
 spec:
   description: GitOps-managed OpenShift Virtualization VMs
   sourceRepos:
     - "*"
+    - https://github.com/sourabhdey21/openshiftvmshomelab.git
+  sourceNamespaces:
+    - openshift-gitops
   destinations:
     - namespace: gitops-vms
       server: https://kubernetes.default.svc
-    - namespace: openshift-gitops
+    - namespace: "*"
       server: https://kubernetes.default.svc
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
+    - group: "*"
+      kind: "*"
   namespaceResourceWhitelist:
     - group: "*"
       kind: "*"
