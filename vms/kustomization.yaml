@@ -11,3 +11,4 @@ resources:
   - postgresql.yaml
   - fedora-db.yaml
   - lampstack.yaml
+  - httpd-server.yaml
