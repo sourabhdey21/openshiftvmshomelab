@@ -24,7 +24,7 @@ spec:
         storage:
           resources:
             requests:
-              storage: 30Gi
+              # Fedora image is ~32Gi. Smaller than 32Gi will cause DataVolumeError.
           # storageClassName: ocs-storagecluster-ceph-rbd
   template:
     metadata:
