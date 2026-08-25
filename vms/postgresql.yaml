@@ -1,0 +1,92 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/part-of: gitops-vms
+    app.kubernetes.io/managed-by: gitops
+    vm-role: db
+spec:
+  runStrategy: Always
+  dataVolumeTemplates:
+    - metadata:
+        name: postgresql-rootdisk
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: fedora
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 100Gi
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: postgresql
+        app.kubernetes.io/name: postgresql
+        vm-role: db
+    spec:
+      evictionStrategy: LiveMigrate
+      domain:
+        cpu:
+          cores: 2
+        memory:
+          guest: 4Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinit
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: postgresql-rootdisk
+        - name: cloudinit
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: postgresql
+              users:
+                - name: cloud-user
+                  lock_passwd: false
+                  sudo: ALL=(ALL) NOPASSWD:ALL
+                  ssh_authorized_keys:
+                    - ssh-ed25519 TODO_REPLACE_WITH_YOUR_PUBLIC_KEY
+                  passwd: $6$K9TOsEC9xpM0q.AC$C1snA3ATH141HkrkOINfjFDfv/5vITAn8gkx57TAZWhUQt2xkSkxTGOtZhi8cs4UXJ0UKyslWZ8FZWNWyqfWH0
+              chpasswd:
+                expire: false
+              runcmd:
+                - dnf install -y postgresql-server postgresql-contrib
+                - postgresql-setup --initdb
+                - sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /var/lib/pgsql/data/postgresql.conf
+                - echo "host all all 0.0.0.0/0 scram-sha-256" >> /var/lib/pgsql/data/pg_hba.conf
+                - systemctl enable --now postgresql
+                - firewall-cmd --permanent --add-port=5432/tcp || true
+                - firewall-cmd --reload || true
+                - su - postgres -c "psql -c \"CREATE USER app WITH PASSWORD 'C1sc0123!' SUPERUSER;\""
+                - su - postgres -c "psql -c \"CREATE DATABASE app OWNER app;\""
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql-lb
+spec:
+  selector:
+    kubevirt.io/domain: postgresql
+  type: LoadBalancer
+  ports:
+    - name: postgresql
+      protocol: TCP
+      port: 5432
+      targetPort: 5432

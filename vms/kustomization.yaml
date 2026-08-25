@@ -8,3 +8,4 @@ resources:
   - db-01.yaml
   - nginx-01.yaml
   - mysql.yaml
+  - postgresql.yaml
