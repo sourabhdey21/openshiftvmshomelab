@@ -1,0 +1,94 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: mysql
+  labels:
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/part-of: gitops-vms
+    app.kubernetes.io/managed-by: gitops
+    vm-role: db
+spec:
+  runStrategy: Always
+  dataVolumeTemplates:
+    - metadata:
+        name: mysql-rootdisk
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: fedora
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              # DB disks need more than the ~32Gi Fedora image minimum
+              storage: 80Gi
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: mysql
+        app.kubernetes.io/name: mysql
+        vm-role: db
+    spec:
+      evictionStrategy: LiveMigrate
+      domain:
+        cpu:
+          cores: 2
+        memory:
+          guest: 4Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinit
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: mysql-rootdisk
+        - name: cloudinit
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: mysql
+              users:
+                - name: cloud-user
+                  sudo: ALL=(ALL) NOPASSWD:ALL
+                  ssh_authorized_keys:
+                    - ssh-ed25519 TODO_REPLACE_WITH_YOUR_PUBLIC_KEY
+                  password: $6$rounds=4096$NRQfL3DJxNqkq6Yz$Ch4XG9Vnt8UjZIyW9ba6RCBT2bFz5KiMiGuTQt4BFGSVMXoUAm/vYxG5oiD8VNyMypW8TSjjv0W1FjBEnMH3v.
+                  chpasswd: { expire: False }
+              write_files:
+                - path: /etc/my.cnf.d/99-listen.cnf
+                  permissions: "0644"
+                  content: |
+                    [mysqld]
+                    bind-address = 0.0.0.0
+                    mysqlx-bind-address = 0.0.0.0
+              runcmd:
+                - dnf install -y community-mysql-server || dnf install -y mariadb-server
+                - (systemctl enable --now mysqld || systemctl enable --now mariadb)
+                - firewall-cmd --permanent --add-port=3306/tcp || true
+                - firewall-cmd --reload || true
+                - mysql -e "CREATE USER IF NOT EXISTS 'app'@'%' IDENTIFIED BY 'ChangeMeNow'; GRANT ALL PRIVILEGES ON *.* TO 'app'@'%' WITH GRANT OPTION; FLUSH PRIVILEGES;"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-lb
+spec:
+  selector:
+    kubevirt.io/domain: mysql
+  type: LoadBalancer
+  ports:
+    - name: mysql
+      protocol: TCP
+      port: 3306
+      targetPort: 3306

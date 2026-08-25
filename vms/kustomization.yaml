@@ -7,3 +7,4 @@ resources:
   - web-01.yaml
   - db-01.yaml
   - nginx-01.yaml
+  - mysql.yaml
