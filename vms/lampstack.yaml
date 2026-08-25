@@ -111,9 +111,9 @@ spec:
       evictionStrategy: LiveMigrate
       domain:
         cpu:
-          cores: 2
+          cores: 8
         memory:
-          guest: 4Gi
+          guest: 16Gi
         devices:
           disks:
             - name: rootdisk
