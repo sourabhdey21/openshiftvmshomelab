@@ -20,7 +20,8 @@ spec:
         storage:
           resources:
             requests:
-              storage: 20Gi
+              # Fedora golden image is ~32Gi; smaller clones fail with DataVolumeError
+              storage: 30Gi
   template:
     metadata:
       labels:
@@ -78,9 +79,11 @@ spec:
     kubevirt.io/domain: nginx-01
   type: LoadBalancer
   ports:
-    - protocol: TCP
+    - name: http
+      protocol: TCP
       port: 80
       targetPort: 80
-    - protocol: TCP
+    - name: https
+      protocol: TCP
       port: 443
       targetPort: 443
